@@ -92,10 +92,10 @@ namespace italki.Controllers
                     teacher_type = 1,
                     origin_country_id = new[] { countryId }
                 },
-                week_time_user = new
-                {
-                    time_list = new[] { 18, 19, 20, 21 }
-                },
+                //week_time_user = new
+                //{
+                //    time_list = new[] { 18, 19, 20, 21 }
+                //},
                 page_size = 20,
                 page
             };
