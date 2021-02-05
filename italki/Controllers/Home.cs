@@ -92,12 +92,16 @@ namespace italki.Controllers
                     teacher_type = 1,
                     origin_country_id = new[] { countryId }
                 },
+                week_time_user = new
+                {
+                    time_list = new[] { 18, 19, 20, 21 }
+                },
                 page_size = 20,
                 page
             };
 
 
-           return await Client.PostAsJsonAsync(TEACHERS_API, body);
+            return await Client.PostAsJsonAsync(TEACHERS_API, body);
         }
 
         private List<Teacher> ReadResponse(HttpResponseMessage httpResponseMessage, out bool hasNext)
