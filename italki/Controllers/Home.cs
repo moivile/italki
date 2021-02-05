@@ -1,10 +1,12 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace italki.Controllers
@@ -15,8 +17,13 @@ namespace italki.Controllers
     {
         private HttpClient Client { get; }
 
-        private string _token =
+        private const string TOKEN =
             "1615048561gAAAAABgHCJxH16yLwFcnKmQA1BUT4YnD_-uTqIQGKi_zbnqbtiYPWCRohMKg89eKeiUhN7IUHOlljuv7yvlc3c1aRcXuxQkFnWTXnhvfOdgB4e7ISQRsy76UQQ7x7wl9x7e5e1We9Uexsg3x-Wu8vnss1he9h-FmYQgPkje38MWFCQmaFCs6-E=";
+
+        private const string HOST = "api.italki.com";
+        private const string TEACHERS_API = "https://api.italki.com/api/v2/teachers";
+        private const string TEACHER_API = "https://api.italki.com/api/v2/teacher/{0}";
+
 
 
 
@@ -26,8 +33,8 @@ namespace italki.Controllers
         {
             _logger = logger;
             Client = new HttpClient();
-            Client.DefaultRequestHeaders.Add("X-Token", _token);
-            Client.DefaultRequestHeaders.Host = "api.italki.com";
+            Client.DefaultRequestHeaders.Add("X-Token", TOKEN);
+            Client.DefaultRequestHeaders.Host = HOST;
         }
 
         [HttpGet]
@@ -45,17 +52,11 @@ namespace italki.Controllers
 
             result = result.Where(x => x.SessionCount > 1000).ToList();
 
-
             var tasks = result.Select(RetrieveStudentCountAsync);
 
-            var chunkArray = tasks.Chunk(20).ToArray();
+            await Task.WhenAll(tasks);
 
-            foreach (var chunk in chunkArray)
-            {
-                await Task.WhenAll(chunk);
-            }
-
-            result = result.Where(x => x.Rating > 10).OrderByDescending(x => x.Rating).ToList();
+            result = result.Where(x => x.Rating > 12).OrderByDescending(x => x.Rating).ToList();
 
             return result;
         }
@@ -67,47 +68,64 @@ namespace italki.Controllers
             for (var page = 1; ; page++)
             {
 
+                var httpResponseMessage = await GetTeachersResponseAsync(page, countryId);
 
-                var body = new
+                result.AddRange(ReadResponse(httpResponseMessage, out bool hasNext));
+
+                if (hasNext) break;
+            }
+
+            return result;
+        }
+
+        private async Task<HttpResponseMessage> GetTeachersResponseAsync(int page, string countryId)
+        {
+            var body = new
+            {
+                teach_language = new
                 {
-                    teach_language = new
-                    {
-                        language = "english",
-                        is_native = 1
-                    },
-                    teacher_info = new
-                    {
-                        teacher_type = 1,
-                        origin_country_id = new[] { countryId }
-                    },
-                    page_size = 20,
-                    page
+                    language = "english",
+                    is_native = 1
+                },
+                teacher_info = new
+                {
+                    teacher_type = 1,
+                    origin_country_id = new[] { countryId }
+                },
+                page_size = 20,
+                page
+            };
+
+
+           return await Client.PostAsJsonAsync(TEACHERS_API, body);
+        }
+
+        private List<Teacher> ReadResponse(HttpResponseMessage httpResponseMessage, out bool hasNext)
+        {
+            var jsonElement = JsonDocument.Parse(httpResponseMessage.Content.ReadAsStream()).RootElement;
+
+            JsonElement.ArrayEnumerator data = jsonElement.GetProperty("data").EnumerateArray();
+
+            var result = new List<Teacher>();
+
+            foreach (var item in data)
+            {
+
+                var teacher = new Teacher
+                {
+                    UserId = item.GetProperty("user_info").GetProperty("user_id").GetInt32(),
+                    Nickname = item.GetProperty("user_info").GetProperty("nickname").GetString(),
+                    OriginCountryId = item.GetProperty("user_info").GetProperty("origin_country_id").GetString(),
+                    SessionCount = item.GetProperty("teacher_info").GetProperty("session_count").GetInt32(),
+                    MinPrice = item.GetProperty("course_info").GetProperty("min_price").GetInt32()
                 };
 
 
-                var httpResponseMessage = await Client.PostAsJsonAsync("https://api.italki.com/api/v2/teachers", body);
-                var jsonElement = JsonDocument.Parse(await httpResponseMessage.Content.ReadAsStringAsync()).RootElement;
-
-                if (jsonElement.GetProperty("success").GetInt32() == 0) continue;
-
-                var data = jsonElement.GetProperty("data").EnumerateArray();
-
-                foreach (var item in data)
-                {
-
-                    var teacher = new Teacher();
-
-                    teacher.UserId = item.GetProperty("user_info").GetProperty("user_id").GetInt32();
-                    teacher.Nickname = item.GetProperty("user_info").GetProperty("nickname").GetString();
-                    teacher.OriginCountryId = item.GetProperty("user_info").GetProperty("origin_country_id").GetString();
-                    teacher.SessionCount = item.GetProperty("teacher_info").GetProperty("session_count").GetInt32();
-                    teacher.MinPrice = item.GetProperty("course_info").GetProperty("min_price").GetInt32();
-
-                    result.Add(teacher);
-                }
-
-                if (jsonElement.GetProperty("paging").GetProperty("has_next").GetInt32() == 0) break;
+                result.Add(teacher);
             }
+
+            hasNext = jsonElement.GetProperty("paging").GetProperty("has_next").GetInt32() == 0;
+
 
             return result;
         }
@@ -115,7 +133,12 @@ namespace italki.Controllers
 
         private async Task RetrieveStudentCountAsync(Teacher teacher)
         {
-            var jsonElement = JsonDocument.Parse(await Client.GetStreamAsync($"https://api.italki.com/api/v2/teacher/{teacher.UserId}")).RootElement;
+            var semaphore = new SemaphoreSlim(20);
+
+            await semaphore.WaitAsync();
+            var jsonElement = JsonDocument.Parse(await Client.GetStreamAsync(string.Format(TEACHER_API, teacher.UserId))).RootElement;
+            semaphore.Release();
+
             teacher.StudentCount = jsonElement.GetProperty("data").GetProperty("teacher_info").GetProperty("student_count").GetInt32();
         }
 
