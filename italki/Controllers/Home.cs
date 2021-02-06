@@ -25,8 +25,6 @@ namespace italki.Controllers
         private const string TEACHER_API = "https://api.italki.com/api/v2/teacher/{0}";
 
 
-
-
         private readonly ILogger<Home> _logger;
 
         public Home(ILogger<Home> logger)
@@ -42,21 +40,20 @@ namespace italki.Controllers
         {
             var result = new List<Teacher>();
 
-            var countryIds = new[] { "US", "GB", "CA", "AU", "ZA", "IE", "NZ" };
-
+            string[] countryIds = { "US", "GB", "CA", "AU", "ZA", "IE", "NZ" };
 
             foreach (var countryId in countryIds)
             {
                 result.AddRange(await GetTeachersByCountryId(countryId));
             }
 
-            result = result.Where(x => x.SessionCount > 1000).ToList();
+            result = result.Where(x => x.SessionCount > 1500).ToList();
 
             var tasks = result.Select(RetrieveStudentCountAsync);
 
             await Task.WhenAll(tasks);
 
-            result = result.Where(x => x.Rating > 12).OrderByDescending(x => x.Rating).ToList();
+            result = result.Where(x => x.Rating > 12 && x.MinPrice <= 2500).OrderByDescending(x => x.Rating).ToList();
 
             return result;
         }
