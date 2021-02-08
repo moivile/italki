@@ -7,7 +7,7 @@
         public string OriginCountryId { get; set; }
         public int SessionCount { get; set; }
         public int StudentCount { get; set; }
-        public int Rating => SessionCount / StudentCount;
+        public double Rating => (double)SessionCount / StudentCount;
         public string Url => $"https://www.italki.com/teacher/{UserId}";
         public int MinPrice { get; set; }
     }

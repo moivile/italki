@@ -67,7 +67,7 @@ namespace italki.Controllers
 
                 var httpResponseMessage = await GetTeachersResponseAsync(page, countryId);
 
-                result.AddRange(ReadResponse(httpResponseMessage, out bool hasNext));
+                result.AddRange(ToListTeacher(httpResponseMessage, out bool hasNext));
 
                 if (hasNext) break;
             }
@@ -101,7 +101,7 @@ namespace italki.Controllers
             return await Client.PostAsJsonAsync(TEACHERS_API, body);
         }
 
-        private List<Teacher> ReadResponse(HttpResponseMessage httpResponseMessage, out bool hasNext)
+        private List<Teacher> ToListTeacher(HttpResponseMessage httpResponseMessage, out bool hasNext)
         {
             var jsonElement = JsonDocument.Parse(httpResponseMessage.Content.ReadAsStream()).RootElement;
 
